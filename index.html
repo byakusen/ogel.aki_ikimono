@@ -572,6 +572,22 @@ header .tabs{margin-left:0}
 /* ===== 追加②ここまで ===== */
 /* ===== 追加ここまで ===== */
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ===== 📝 テストの練習：置き場所と、テスト中の見た目 ===== */
+header{min-height:67px}                       /* テスト中にタブを消しても高さが変わらないように */
+#test-anchor{display:flex;align-items:center;padding-bottom:8px;margin:0 -9px}
+body.testing #test-anchor{margin:0}
+#test-skip{display:none;white-space:nowrap;font-family:"Zen Maru Gothic",sans-serif;font-weight:700;font-size:15px;
+  padding:7px 15px;border:2px solid var(--line);border-radius:999px;background:#fff;color:var(--sumi-w);cursor:pointer}
+#test-skip:hover{background:#F7EFDC;color:var(--sumi)}
+body.testing #test-skip{display:inline-block}
+body.testing header .tabs{display:none}       /* テスト中はタブを使わない（幅を空ける） */
+body.testing .qhead [data-go],
+body.testing .qhead .nav{pointer-events:none;opacity:.3}   /* ◀▶は消さずに無効化（位置を動かさないため） */
+body.testing #p4 .keys{display:none}
+body.testing #score4{display:none}            /* テスト中は、テストの練習の数えかたに合わせる */
+#quiz.only .q:not(.solo){display:none}        /* たしかめクイズを1問だけ出す */
+#quiz.only{grid-template-columns:1fr}
 </style>
 </head>
 <body>
@@ -580,6 +596,7 @@ header .tabs{margin-left:0}
   <header>
     <div class="brand"><span class="g">４年　理科</span><h1>秋の生き物</h1></div>
     <button class="sndbtn on" id="sndbtn" title="正かいの音（オン・オフ）" aria-label="正かいの音"><span>🔊</span></button>
+    <div id="test-anchor"><button id="test-skip" type="button">とばす</button><button id="test-hintproxy" type="button" hidden aria-hidden="true"></button></div>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="true"  data-p="p1">秋の生き物のようす</button>
       <button class="tab" role="tab" aria-selected="false" data-p="p2">植物を育てよう</button>
@@ -1146,6 +1163,7 @@ addEventListener('resize',resize);resize();
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x===t));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===t.dataset.p));
+  rememberTab(t.dataset.p);
 });
 
 /* 手がきの赤い○ */
@@ -1186,6 +1204,7 @@ function goStep(id){
   document.querySelectorAll('#p1 .step').forEach(s=>s.classList.toggle('on',s.id===id));
   const gs=document.getElementById(id);                       /* まだ答えていなければ入れかえる */
   if(gs&&!gs.classList.contains('done'))shufflePair(gs.querySelector('.one .pair'));
+  rememberMode(id);
   closeHint();
 }
 function answer(sel,group){
@@ -1208,7 +1227,8 @@ function answer(sel,group){
     if(right)pinpon();
     sc.className='score '+(right?'good':'bad');
     sc.textContent=(right?'せいかい！':'こちらが正かいです')+(nx?'　つぎへ…':'　おしまい！');
-    if(nx)stepTimer=setTimeout(()=>goStep(nx), 2500);
+    if(nx&&!hookJudge(right))stepTimer=setTimeout(()=>goStep(nx), 2500);   /* テスト中は自動送りをしない */
+    else if(!nx)hookJudge(right);
   },650);
 }
 document.querySelectorAll('.pair').forEach(g=>g.querySelectorAll('.card').forEach(c=>c.onclick=()=>answer(c,g)));
@@ -1218,9 +1238,9 @@ document.querySelectorAll('.picks').forEach(g=>g.querySelectorAll('.pick,.pickw'
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>goStep(b.dataset.go));
 
 /* やりなおす */
-document.querySelectorAll('[data-reset]').forEach(btn=>btn.onclick=()=>{
+function resetStep(id){
   clearTimeout(stepTimer);
-  const st=document.getElementById(btn.dataset.reset);
+  const st=document.getElementById(id); if(!st)return;
   st.classList.remove('done','show');
   document.querySelectorAll('[data-reveal="'+st.id+'"]').forEach(b=>b.classList.remove('on'));
   st.querySelectorAll('.card,.pick,.pickw,.mcard').forEach(x=>x.classList.remove('sel','selx','ok','ng','ansmark','pk'));
@@ -1228,7 +1248,9 @@ document.querySelectorAll('[data-reset]').forEach(btn=>btn.onclick=()=>{
   const wy=st.querySelector('.why');if(wy&&wy.resetWhy)wy.resetWhy();
   shufflePair(st.querySelector('.one .pair'));                /* もう一度やるときは左右を入れかえる */
   const sc=document.getElementById('score-'+st.id);sc.textContent='';sc.className='score';
-});
+  testReset();
+}
+document.querySelectorAll('[data-reset]').forEach(btn=>btn.onclick=()=>resetStep(btn.dataset.reset));
 
 /* タブ2 */
 const D={
@@ -1287,6 +1309,7 @@ QZ.forEach(q=>{
     el.querySelector('.fb').textContent=(right?'○ ':'× ')+q[2];
     if(right)pinpon();
     upScore();
+    hookJudge(right);
   });
   qw.appendChild(el);
 });
@@ -1305,6 +1328,7 @@ q4.querySelectorAll('.ob').forEach(b=>b.onclick=()=>{
     :'× 正かいは「実」。秋は葉やくきがかれ始め、実が大きく育ちます。';
   if(right)pinpon();
   upScore();
+  hookJudge(right);
 });
 qw.appendChild(q4);
 
@@ -1324,6 +1348,7 @@ q5.querySelectorAll('.ob').forEach(b=>b.onclick=()=>{
     :'× 正かいは「気温が低くなるから」。気温が下がると、生き物のようすも変わります。';
   if(right)pinpon();
   upScore();
+  hookJudge(right);
 });
 qw.appendChild(q5);
 
@@ -1444,6 +1469,7 @@ function drawHint(key,deep){
 }
 function closeHint(){hc.hidden=true;hNow=null;document.querySelectorAll('.btn.hint').forEach(b=>b.classList.remove('on'))}
 document.querySelectorAll('.btn.hint').forEach(b=>b.onclick=()=>{
+  markHint();                                 /* テストの練習に「ヒントを見た」と伝える */
   if(b.dataset.reveal){                       /* ①：写真の下のことばを出す */
     const st=document.getElementById(b.dataset.reveal);
     st.classList.toggle('show');
@@ -1483,6 +1509,7 @@ function showPage(pg){
   if(sp&&!sp.classList.contains('done'))shufflePair(sp);
   const sl=pg.querySelector('.lines');
   if(sl&&!sl.classList.contains('done'))shuffleLines();
+  rememberPage(pg);
   closeHint();
 }
 function resetPage(pg){
@@ -1517,6 +1544,7 @@ function resetPage(pg){
     q.querySelectorAll('.ob').forEach(x=>x.classList.remove('ok','ng'));
     q.querySelector('.fb').textContent='';
   });
+  testReset();
 }
 document.querySelectorAll('.modesw button').forEach(b=>b.onclick=()=>{
   showPage(pgList(b.closest('.panel'),b.dataset.m)[0]);
@@ -1562,7 +1590,8 @@ document.querySelectorAll('.msel').forEach(g=>{
       const nx=NEXT[st.id];
       sc.className='score '+(right?'good':'bad');
       sc.textContent=(right?'せいかい！':'こちらが正かいです')+(nx?'　つぎへ…':'　おしまい！');
-      if(nx)stepTimer=setTimeout(()=>goStep(nx), 2500);
+      if(nx&&!hookJudge(right))stepTimer=setTimeout(()=>goStep(nx), 2500);
+      else if(!nx)hookJudge(right);
     },650);
   });
 });
@@ -1588,6 +1617,7 @@ document.querySelectorAll('.ords').forEach(w=>{
     if(right)pinpon();
     msg.className='ordmsg '+(right?'good':'bad');
     msg.textContent=right?w.dataset.ok:w.dataset.ng;
+    hookJudge(right);
   });
 });
 
@@ -1607,6 +1637,8 @@ document.querySelectorAll('.miniq').forEach(q=>{
     q.classList.remove('right','wrong');q.classList.add('done',right?'right':'wrong');
     q.querySelector('.fb').textContent=(right?'○ ':'× ')+(right?q.dataset.ok:q.dataset.ng);
     if(right)pinpon();
+    const all=[...q.closest('.pg').querySelectorAll('.miniq')];
+    hookJudge(right,all.every(x=>x.classList.contains('done')));   /* ２問そろったら次の大問へ */
   });
 });
 
@@ -1629,9 +1661,11 @@ gc3.onclick=e=>{
     gDone=true;pinpon();
     gmsg.className='gmsg good';
     gmsg.textContent='せいかい！　5月16℃・7月28℃とくらべると、11月は気温が下がっているとわかります。';
+    hookJudge(true);
   }else{
     gmsg.className='gmsg bad';
     gmsg.textContent=`いまは ${v}℃ です。カードの「気温」をもう一度たしかめて、おしなおしましょう。`;
+    hookJudge(false,false);                    /* まちがいを数えるだけ（まだおしまいではない） */
   }
 };
 
@@ -1651,6 +1685,7 @@ function answerFree(sel,group,msg){
     }
     if(right)pinpon();
     if(msg){msg.className='ordmsg '+(right?'good':'bad');msg.textContent=right?group.dataset.ok:group.dataset.ng;}
+    hookJudge(right);
   },650);
 }
 document.querySelectorAll('.pair.free,.lines').forEach(g=>{
@@ -1732,6 +1767,7 @@ shuffleLines();
       msg.textContent='正かいは「気温が低くなるから」。気温が下がると、生き物のようすも変わります。';
       sc.className='score bad'; sc.textContent='こちらが正かいです　おしまい！';
     }
+    hookJudge(right);
   }
   w.querySelectorAll('.wchip').forEach(c=>c.onclick=()=>{
     if(w.classList.contains('done'))return;
@@ -1752,6 +1788,115 @@ shuffleLines();
   };
 })();
 
+
+/* ============================================================
+   📝 テストの練習 との つなぎ（アダプタ）
+   「テストの練習」は MODES / setMode / showHanamaru / applyJudge という
+   決まった名前をつかいます。このアプリにはもともと無いので、ここで用意します。
+   ※ showHanamaru と applyJudge は からっぽのままにしておきます。
+     （「テストの練習」が外からつつんで、中身を入れるしくみのため。
+       この２つの中に TestRun という字を書くと、つつんでもらえなくなります）
+   ============================================================ */
+
+/* １つの「大問」＝このアプリの１つの問題 */
+const MODES={
+  st1 :{label:'① サクラ（夏と秋）',            tab:'p1',step:'st1'},
+  st2 :{label:'① オオカマキリ（夏と秋）',      tab:'p1',step:'st2'},
+  st3 :{label:'① オンブバッタ（春と秋）',      tab:'p1',step:'st3'},
+  st4 :{label:'② ツバメの秋のようす',          tab:'p1',step:'st4'},
+  st5 :{label:'② トノサマガエルの秋のようす',  tab:'p1',step:'st5'},
+  st6 :{label:'③ 記録カードに書きたすこと',    tab:'p1',step:'st6'},
+  st7 :{label:'④ 秋に見られる動物の数',        tab:'p1',step:'st7'},
+  st8 :{label:'⑤ 秋の生き物のようす',          tab:'p1',step:'st8'},
+  st9 :{label:'⑥ ようすが変わるわけ',          tab:'p1',step:'st9'},
+  p2q1:{label:'ヘチマを春から冬にならべる',    tab:'p2',pg:'p2q1'},
+  p2q2:{label:'ヒョウタンの実が育つ順',        tab:'p2',pg:'p2b'},
+  p2q3:{label:'イチョウの夏と秋',              tab:'p2',pg:'p2c'},
+  p3q1:{label:'記録カードを読む（２問）',      tab:'p3',pg:'p3q1'},
+  p3q2:{label:'気温をグラフに表す',            tab:'p3',pg:'p3g'},
+  p3q3:{label:'秋の記録はア・イどちら',        tab:'p3',pg:'p3l'},
+  qz1 :{label:'たしかめ① 秋の気温',            tab:'p4',quiz:0},
+  qz2 :{label:'たしかめ② ツバメ',              tab:'p4',quiz:1},
+  qz3 :{label:'たしかめ③ オオカマキリ',        tab:'p4',quiz:2},
+  qz4 :{label:'たしかめ④ サクラ',              tab:'p4',quiz:3},
+  qz5 :{label:'たしかめ⑤ いちばん成長した部分',tab:'p4',quiz:4},
+  qz6 :{label:'たしかめ⑥ 変わるわけ',          tab:'p4',quiz:5}
+};
+
+let mode='st1';          /* いま開いている大問（テストのあと、ここへもどる） */
+let M=MODES.st1;         /* いまの大問（「テストの練習」が一時的に印をつける） */
+let hintOn=false;        /* ヒントを見たか */
+let autoTimers=[];       /* 「テストの練習」が次の大問へ進むためのタイマー */
+let hookFired=false;     /* その大問の「おしまい」を、もう知らせたか */
+const HANAMARU_SHOW_MS=2200, AUTO_NEXT_MS=1000;   /* 次の大問へ進むまで 3.2秒 */
+
+function showHanamaru(){}     /* ← つつまれる。中身は書かない */
+function applyJudge(r){}      /* ← つつまれる。中身は書かない */
+
+function clearAutoNext(){
+  clearTimeout(stepTimer);
+  autoTimers.forEach(clearTimeout); autoTimers=[];
+}
+function testOn(){ return !!(window.TestRun && TestRun.on && TestRun.on()); }
+function testReset(){ try{ clearAutoNext(); }catch(e){} hookFired=false; }
+
+/* 答えあわせのたびに呼ぶ。
+   ok  … 正かいかどうか（まちがいを数える）
+   fin … その大問がこれでおしまいなら true（省略も true）。まだ続くときだけ false
+   もどり値が true なら「テストの練習」が次へ進めるので、アプリ自身の自動送りはしない */
+function hookJudge(ok,fin){
+  try{
+    applyJudge({ok:!!ok});
+    if(fin!==false && !hookFired){ hookFired=true; showHanamaru(); }
+    return testOn();
+  }catch(e){ return false; }
+}
+function markHint(){
+  hintOn=true;
+  const hp=document.getElementById('test-hintproxy'); if(hp)hp.click();
+}
+/* いまどこを開いているかをおぼえておく（テストのあと、ここへもどる） */
+function rememberMode(id){ try{ if(MODES[id])mode=id; }catch(e){} }
+function rememberPage(pg){ try{
+  const k=Object.keys(MODES).find(x=>MODES[x].pg===pg.dataset.hint); if(k)mode=k;
+}catch(e){} }
+function rememberTab(p){ try{
+  if(MODES[mode]&&MODES[mode].tab===p)return;
+  const k=Object.keys(MODES).find(x=>MODES[x].tab===p); if(k)mode=k;
+}catch(e){} }
+
+/* たしかめクイズを、テスト中は１問だけ出す */
+function quizSolo(i){
+  const qz=document.getElementById('quiz'); if(!qz)return;
+  qz.classList.toggle('only',i!=null);
+  [...qz.querySelectorAll('.q')].forEach((q,k)=>{
+    const on=(i!=null&&k===i);
+    q.classList.toggle('solo',on);
+    if(on){
+      q.classList.remove('done','right','wrong');
+      q.querySelectorAll('.ob').forEach(x=>x.classList.remove('ok','ng'));
+      q.querySelector('.fb').textContent='';
+    }
+  });
+  const s4=document.getElementById('score4'); if(s4&&i!=null)s4.textContent='';
+}
+
+/* 大問を１つ開く（「テストの練習」から呼ばれる） */
+function setMode(name){
+  const m=MODES[name]; if(!m)return;
+  mode=name; M=m; hintOn=false; hookFired=false;
+  closeHint();
+  document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.p===m.tab));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id===m.tab));
+  if(m.step){ resetStep(m.step); goStep(m.step); }
+  if(m.pg){
+    const pg=document.querySelector('.pg[data-hint="'+m.pg+'"]');
+    if(pg){ resetPage(pg); showPage(pg); }
+  }
+  quizSolo((testOn()&&m.quiz!=null)?m.quiz:null);
+  mode=name; hookFired=false;
+}
+
 /* --- 最初のページを表示 --- */
 document.querySelectorAll('.panel .modesw').forEach(m=>{
   const panel=m.closest('.panel');
@@ -1760,5 +1905,372 @@ document.querySelectorAll('.panel .modesw').forEach(m=>{
 /* ===== 追加ここまで ===== */
 
 </script>
+
+<!-- ============================================================
+     📝 テストの 練習 ①せってい（このアプリのぶん）
+     ・tests … テストの一覧。title（名前）と items（大問の順）
+     ・mode  … 上の MODES のキー（どの問題を出すか）
+     ・parts … ボタンなどの置き場所（このアプリに合わせてある）
+     ============================================================ -->
+<script>
+window.TEST_SETTEI = {
+  button: '📝 テストの練習',
+  tests: [
+    { title:'テスト P.103〜105（思考・判断・表現）', items:[
+      { no:'大問1', mode:'p3q3' },
+      { no:'大問2', mode:'st7'  },
+      { no:'大問3', mode:'st8'  },
+      { no:'大問4', mode:'st9'  } ] },
+    { title:'テスト P.106〜108', items:[
+      { no:'大問1', mode:'p3q2' },
+      { no:'大問2', mode:'st6'  },
+      { no:'大問3', mode:'p2q2' },
+      { no:'大問4', mode:'qz5'  } ] },
+    { title:'秋の生き物のようす（９問 通し）', items:[
+      { no:'①', mode:'st1' }, { no:'①', mode:'st2' }, { no:'①', mode:'st3' },
+      { no:'②', mode:'st4' }, { no:'②', mode:'st5' },
+      { no:'③', mode:'st6' }, { no:'④', mode:'st7' },
+      { no:'⑤', mode:'st8' }, { no:'⑥', mode:'st9' } ] },
+    { title:'たしかめクイズ（６問）', items:[
+      { no:'1', mode:'qz1' }, { no:'2', mode:'qz2' }, { no:'3', mode:'qz3' },
+      { no:'4', mode:'qz4' }, { no:'5', mode:'qz5' }, { no:'6', mode:'qz6' } ] },
+    { title:'もんだいを ぜんぶ（15問）', items:[
+      { no:'1',  mode:'st1' }, { no:'2',  mode:'st2' }, { no:'3',  mode:'st3' },
+      { no:'4',  mode:'st4' }, { no:'5',  mode:'st5' }, { no:'6',  mode:'st6' },
+      { no:'7',  mode:'st7' }, { no:'8',  mode:'st8' }, { no:'9',  mode:'st9' },
+      { no:'10', mode:'p2q1' }, { no:'11', mode:'p2q2' }, { no:'12', mode:'p2q3' },
+      { no:'13', mode:'p3q1' }, { no:'14', mode:'p3q2' }, { no:'15', mode:'p3q3' } ] }
+  ],
+  parts: { after:'#test-anchor', next:'#test-skip', hint:'#test-hintproxy',
+           tabs:'header .tabs, .modesw', chalBtn:'#test-no-challenge' }
+};
+</script>
+
+<!-- ============================================================
+     📝 テストの 練習 ②しくみ（test_renshu v1・2026-09-26）— さわらない
+     shukuzu1.html の B1 を、ほかの アプリでも つかえるように 取り出したもの。
+     ・土台（zukei_base1 の C）は 1行も 直さなくて よい。
+       showHanamaru と applyJudge を 外から つつんで（ラップして）つかう。
+     ・土台に もう「window.TestRun」の 2行が 入っている ときは つつまない（二重に 数えない）。
+     ・10問チャレンジ（Challenge10）とは べつの しくみ。始めると チャレンジは 切る。
+     ============================================================ -->
+<script>
+window.TestRun = (function(){
+  'use strict';
+  const S = window.TEST_SETTEI;
+  const P = Object.assign({ after:'#chal-mount', next:'#next', hint:'#hintBtn',
+                            tabs:'#gtabs,#subTabs', chalBtn:'#btn-challenge' }, (S && S.parts) || {});
+  const $ = id => document.getElementById(id);
+  const q = sel => sel ? document.querySelector(sel) : null;
+
+  /* ---- 土台に 必要な ものが あるか ---- */
+  const lack = [];
+  if(typeof MODES        !== 'object')   lack.push('MODES');
+  if(typeof setMode      !== 'function') lack.push('setMode');
+  if(typeof showHanamaru !== 'function') lack.push('showHanamaru');
+  if(typeof applyJudge   !== 'function') lack.push('applyJudge');
+  if(!S || !Array.isArray(S.tests) || !S.tests.length) lack.push('TEST_SETTEI.tests');
+  if(lack.length){ console.warn('テストの練習：土台に ないので うごきません →', lack.join('・')); return null; }
+
+  /* ---- せっていを たしかめる（ない 小タブは とばす）---- */
+  const TESTS = S.tests.map(t => ({
+    title: t.title || 'テスト',
+    items: (t.items || []).filter(it => {
+      if(it && MODES[it.mode]) return true;
+      console.warn('テストの練習：小タブ「' + (it && it.mode) + '」が ないので とばします（' + t.title + '）');
+      return false;
+    })
+  })).filter(t => t.items.length);
+  if(!TESTS.length){ console.warn('テストの練習：出せる 大問が ありません'); return null; }
+
+  const setOf = it => Object.assign({}, it.meth !== undefined ? { meth: it.meth } : {}, it.set || {});
+  const itemName = it => it.name || ((MODES[it.mode].label || it.mode) + (MODES[it.mode].sub || ''));
+  const nowMode = () => (typeof mode === 'string' ? mode : '');
+  const waitMs = () => (typeof HANAMARU_SHOW_MS === 'number' ? HANAMARU_SHOW_MS : 2000)
+                     + (typeof AUTO_NEXT_MS     === 'number' ? AUTO_NEXT_MS     : 1500);
+
+  let run = null;   // { t, i, rec:[{miss,hint,st}], back, saved }
+  let myTimer = 0;
+
+  /* ---- 見た目（CSS は ここで 足す。土台の <style> は さわらない）---- */
+  const css = document.createElement('style');
+  css.id = 'test-style';
+  css.textContent = [
+    '#test-mount{position:relative;flex:0 0 auto;display:flex;align-items:center;}',
+    '#test-btn{font-family:"Yusei Magic",sans-serif;font-size:clamp(13px,1.7vw,17px);padding:5px 14px;white-space:nowrap;',
+    '  color:#138577;background:#e3f6f2;border:2px solid #7fd3c6;border-radius:20px;box-shadow:0 2px 0 #7fd3c6;cursor:pointer;}',
+    '#test-btn:focus-visible,#test-menu button:focus-visible,#test-bar button:focus-visible,#test-result button:focus-visible{outline:3px solid #138577;outline-offset:2px;}',
+    '#test-menu{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:950;background:#fff;border:3px solid #d8ccae;',
+    '  border-radius:16px;padding:10px;box-shadow:0 8px 24px rgba(52,70,95,.20);flex-direction:column;gap:8px;min-width:270px;max-width:92vw;}',
+    '#test-menu.open{display:flex;}',
+    '#test-menu button{font-family:"Yusei Magic",sans-serif;font-size:17px;padding:11px 14px;border-radius:12px;border:3px solid #7fd3c6;',
+    '  background:#fff;color:#34465f;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px;white-space:nowrap;}',
+    '#test-menu button:hover{background:#f1fbf9;}',
+    '#test-menu small{font-size:14px;color:#6a7d96;}',
+    '#test-bar{display:none;align-items:center;gap:8px;background:rgba(255,255,255,.94);border:2px solid #7fd3c6;border-radius:20px;',
+    '  padding:3px 5px 3px 12px;font-family:"Yusei Magic",sans-serif;color:#138577;white-space:nowrap;font-size:clamp(12px,1.5vw,16px);}',
+    '#test-dots{letter-spacing:1px;}',
+    '#test-stop{font-family:"Yusei Magic",sans-serif;font-size:.9em;padding:3px 10px;border-radius:14px;border:2px solid #d8ccae;background:#fff;color:#6a7d96;cursor:pointer;}',
+    'body.testing #test-btn{display:none;}',
+    'body.testing #test-bar{display:flex;}',
+    'body.testing #chal-mount{display:none;}',
+    P.tabs.split(',').map(s => 'body.testing ' + s.trim()).join(',') + '{pointer-events:none;opacity:.45;}',
+    '#test-result{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;}',
+    '#test-result.show{display:flex;}',
+    '#test-result .tr-card{background:#fff;border-radius:20px;padding:22px 26px;box-shadow:0 10px 40px rgba(0,0,0,.3);max-width:94vw;max-height:92vh;overflow:auto;',
+    '  font-family:"Yusei Magic",sans-serif;color:#34465f;}',
+    '#test-result .tr-title{font-size:clamp(20px,3vw,28px);color:#138577;text-align:center;margin-bottom:12px;}',
+    '#test-result table{border-collapse:collapse;font-size:clamp(14px,2vw,19px);margin:0 auto;}',
+    '#test-result td{padding:6px 10px;border-bottom:2px dashed #eadfc6;white-space:nowrap;}',
+    '#test-result td.no{color:#6a7d96;}',
+    '#test-result td.r-ok{color:#2bb673;}',
+    '#test-result td.r-ng{color:#e85d3b;}',
+    '#test-result td.r-sk{color:#9aa6b5;}',
+    '#test-result .tr-sum{text-align:center;margin-top:12px;font-size:clamp(16px,2.4vw,22px);}',
+    '#test-result .tr-sum b{color:#e85d3b;font-size:1.3em;}',
+    '#test-result .tr-btns{display:flex;gap:12px;justify-content:center;margin-top:16px;}',
+    '#test-result button{font-family:"Yusei Magic",sans-serif;font-size:18px;padding:11px 20px;border-radius:14px;cursor:pointer;}',
+    '#test-again{color:#fff;background:#1fae9c;border:none;box-shadow:0 3px 0 #138577;}',
+    '#test-close{color:#6a7d96;background:#fff;border:2px solid #d8ccae;}'
+  ].join('\n');
+  document.head.appendChild(css);
+
+  /* ---- ボタン・メニュー・帯（10問チャレンジの となり）---- */
+  const mount = document.createElement('div');
+  mount.id = 'test-mount';
+  mount.innerHTML =
+      '<button id="test-btn" type="button">' + (S.button || '📝 テストの 練習') + '</button>'
+    + '<div id="test-menu">'
+    +   TESTS.map((t,k) => '<button type="button" data-k="'+k+'">'+t.title+'<small>'+t.items.length+'問</small></button>').join('')
+    + '</div>'
+    + '<div id="test-bar"><span id="test-no"></span><span id="test-dots"></span>'
+    +   '<button id="test-stop" type="button">やめる</button></div>';
+  const anchor = q(P.after);
+  const header = document.querySelector('header');
+  if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(mount, anchor.nextSibling);
+  else if(header) header.appendChild(mount);
+  else document.body.insertBefore(mount, document.body.firstChild);
+  const res = document.createElement('div');
+  res.id = 'test-result';
+  document.body.appendChild(res);
+
+  /* テストが 1つだけなら、メニューを 出さずに すぐ 始める */
+  $('test-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    if(TESTS.length === 1){ start(0); return; }
+    const m = $('test-menu');
+    m.classList.toggle('open');
+    if(m.classList.contains('open')) placeMenu();
+  });
+  /* せまい 画面で メニューが 左に はみ出す ときは、画面の 中へ ずらす */
+  function placeMenu(){
+    const m = $('test-menu');
+    m.style.left = ''; m.style.right = '';
+    const r = m.getBoundingClientRect(), mr = mount.getBoundingClientRect();
+    if(r.left < 8){ m.style.right = 'auto'; m.style.left = (8 - mr.left) + 'px'; }
+  }
+  $('test-menu').addEventListener('click', e => {
+    const b = e.target.closest('button[data-k]'); if(!b) return;
+    $('test-menu').classList.remove('open');
+    start(+b.dataset.k);
+  });
+  document.addEventListener('click', e => {
+    if(!e.target.closest('#test-mount')) $('test-menu').classList.remove('open');
+  });
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape') $('test-menu').classList.remove('open');
+  });
+  $('test-stop').addEventListener('click', () => stop());
+  /* テストの あいだの「つぎの もんだい」は、その 大問を とばして つぎの 大問へ */
+  document.addEventListener('click', e => {
+    if(!run || !P.next || !e.target.closest(P.next)) return;
+    e.stopPropagation(); e.preventDefault();
+    skip();
+  }, true);
+  /* ヒントを 見たか（ボタンを おした あと hintOn が true なら）*/
+  const hb = q(P.hint);
+  if(hb) hb.addEventListener('click', () => setTimeout(() => {
+    const r = cur();
+    const on = (typeof hintOn === 'boolean') ? hintOn : true;
+    if(r && on && r.st === 'todo') r.hint = true;
+  }, 0));
+
+  /* ---- 土台の 2つの 関数を つつむ（土台に もう 2行 入っていれば つつまない）---- */
+  const BUILTIN = /TestRun/.test(String(showHanamaru)) || /TestRun/.test(String(applyJudge));
+  if(!BUILTIN){
+    const _show = showHanamaru;
+    showHanamaru = function(){
+      if(!run) return _show.apply(this, arguments);
+      /* はなまるは ふつうに 出す。同じ モードの つぎの 問題へは 行かせない（noAutoNext を 一時的に）*/
+      const m = (typeof M === 'object' && M) ? M : null;
+      const had = m && Object.prototype.hasOwnProperty.call(m, 'noAutoNext');
+      const old = m ? m.noAutoNext : undefined;
+      try{ if(m) m.noAutoNext = true; }catch(e){}
+      try{ _show.apply(this, arguments); }
+      finally{ try{ if(m){ if(had) m.noAutoNext = old; else delete m.noAutoNext; } }catch(e){} }
+      api.onDone();
+    };
+    const _judge = applyJudge;
+    applyJudge = function(r){
+      if(run && r && !r.ok && !r.skip) api.miss();
+      return _judge.apply(this, arguments);
+    };
+  }
+
+  /* ---- 中身 ---- */
+  function cur(){ return run ? run.rec[run.i] : null; }
+  function clearMine(){ clearTimeout(myTimer); myTimer = 0; }
+  function bar(){
+    if(!run) return;
+    const T = TESTS[run.t], it = T.items[run.i];
+    $('test-no').textContent = '📝 ' + (/^\d+$/.test(it.no) ? it.no+'問め' : it.no) + '（' + (run.i+1) + '／' + T.items.length + '）';
+    $('test-dots').textContent = run.rec.map((r,i) => r.st==='done' ? '●' : r.st==='skip' ? '－' : (i===run.i ? '◎' : '○')).join('');
+  }
+  /* set で かえる 値を、はじめに 1回だけ おぼえておく */
+  function saveSets(t){
+    const saved = {};
+    TESTS[t].items.forEach(it => {
+      const o = setOf(it), md = MODES[it.mode];
+      Object.keys(o).forEach(k => {
+        const key = it.mode + '\u0000' + k;
+        if(!(key in saved)) saved[key] = { md:md, k:k, had:Object.prototype.hasOwnProperty.call(md,k), v:md[k] };
+      });
+    });
+    return saved;
+  }
+  function restoreSets(saved){
+    Object.keys(saved || {}).forEach(key => {
+      const s = saved[key];
+      try{ if(s.had) s.md[s.k] = s.v; else delete s.md[s.k]; }catch(e){}
+    });
+  }
+  function go(i){
+    clearMine();
+    run.i = i;
+    const it = TESTS[run.t].items[i];
+    const o = setOf(it);
+    Object.keys(o).forEach(k => { try{ MODES[it.mode][k] = o[k]; }catch(e){} });
+    setMode(it.mode);
+    bar();
+  }
+  function start(t){
+    const cb = q(P.chalBtn);
+    if(window.Challenge10 && Challenge10.isOn && Challenge10.isOn() && cb) cb.click();
+    res.classList.remove('show');
+    let back = nowMode();
+    if(run){ back = run.back; restoreSets(run.saved); }
+    run = { t:t, i:0, rec:TESTS[t].items.map(() => ({ miss:0, hint:false, st:'todo' })), back:back, saved:saveSets(t) };
+    document.body.classList.add('testing');
+    go(0);
+  }
+  function next(){
+    if(!run) return;
+    if(run.i + 1 < run.rec.length) go(run.i + 1);
+    else finish();
+  }
+  function skip(){
+    const r = cur(); if(!r) return;
+    if(r.st !== 'done') r.st = 'skip';
+    clearMine();
+    if(typeof clearAutoNext === 'function') clearAutoNext();
+    next();
+  }
+  function finish(){
+    clearMine();
+    const T = TESTS[run.t];
+    let perfect = 0;
+    const rows = T.items.map((it,i) => {
+      const r = run.rec[i];
+      let tx, c;
+      if(r.st==='done' && r.miss===0){ tx = '⭕ ノーミス'; c = 'r-ok'; perfect++; }
+      else if(r.st==='done'){ tx = 'まちがい '+r.miss+'回'; c = 'r-ng'; }
+      else { tx = 'とばした'; c = 'r-sk'; }
+      return '<tr><td class="no">'+it.no+'</td><td>'+itemName(it)+'</td><td class="'+c+'">'+tx+'</td><td>'+(r.hint ? '💡' : '')+'</td></tr>';
+    }).join('');
+    res.innerHTML = '<div class="tr-card">'
+      + '<div class="tr-title">📝 '+T.title+'　おわり！</div>'
+      + '<table>'+rows+'</table>'
+      + '<div class="tr-sum">ノーミスで できた 問題　<b>'+perfect+'</b> ／ '+T.items.length+'</div>'
+      + '<div class="tr-btns"><button id="test-again" type="button">もう一度</button><button id="test-close" type="button">とじる</button></div>'
+      + '</div>';
+    res.classList.add('show');
+    $('test-again').onclick = () => start(run.t);
+    $('test-close').onclick = () => stop();
+    $('test-again').focus();
+  }
+  /* やめる／とじる：set で かえた 値を もどして、はじめの タブへ */
+  function stop(){
+    if(!run) return;
+    const back = run.back, saved = run.saved;
+    run = null;
+    clearMine();
+    res.classList.remove('show');
+    document.body.classList.remove('testing');
+    restoreSets(saved);
+    setMode(back && MODES[back] ? back : TESTS[0].items[0].mode);
+  }
+
+  const api = {
+    on: () => !!run,
+    /* showHanamaru から：その 大問は おわり。はなまるの あと つぎの 大問へ */
+    onDone(){
+      if(!run || res.classList.contains('show')) return !!run;
+      const r = cur(); r.st = 'done';
+      bar();
+      clearMine();
+      const go2 = () => { if(typeof autoTimers !== 'undefined') autoTimers = []; next(); };
+      if(typeof autoTimers !== 'undefined' && Array.isArray(autoTimers)) autoTimers.push(setTimeout(go2, waitMs()));
+      else myTimer = setTimeout(go2, waitMs());
+      return true;
+    },
+    /* applyJudge から：まちがい（skip で ない もの）*/
+    miss(){ const r = cur(); if(r && r.st === 'todo') r.miss++; },
+    /* 外から つかう とき用 */
+    start: t => start(t || 0),
+    stop:  () => stop(),
+    record: () => run ? JSON.parse(JSON.stringify(run.rec)) : null
+  };
+  return api;
+})();
+</script>
+<!-- ============================================================
+     📝 テストの 練習 ③みため（このアプリに色と書体を合わせる）
+     ②のあとに置くこと（あとから足したほうが勝つため）。②は書きかえていません。
+     ============================================================ -->
+<script>
+(function(){
+  const s=document.createElement('style'); s.id='test-style-aki';
+  s.textContent=[
+    '#test-mount{padding-bottom:8px}',
+    '#test-btn{font-family:"Zen Maru Gothic",sans-serif;font-weight:700;font-size:14px;padding:8px 13px;',
+    '  color:#fff;background:var(--ai);border:2px solid var(--ai);border-radius:999px;box-shadow:0 3px 0 rgba(67,51,31,.18);}',
+    '#test-btn:hover{background:#25598A}',
+    '#test-menu{border:3px solid var(--line);border-radius:14px;background:var(--washi);box-shadow:0 10px 28px rgba(67,51,31,.24)}',
+    '#test-menu button{font-family:"Zen Maru Gothic",sans-serif;font-weight:700;font-size:16px;border:2px solid var(--line);',
+    '  color:var(--sumi);background:#fff;border-radius:12px}',
+    '#test-menu button:hover{background:#FDF7E8}',
+    '#test-menu small{font-family:"Zen Kaku Gothic New",sans-serif;color:var(--sumi-w)}',
+    '#test-bar{font-family:"Zen Maru Gothic",sans-serif;font-weight:700;font-size:15px;color:var(--ai);',
+    '  background:#fff;border:2px solid var(--line);border-radius:999px;padding:5px 6px 5px 14px}',
+    '#test-stop{font-family:"Zen Maru Gothic",sans-serif;font-weight:700;font-size:14px;border:2px solid var(--line);',
+    '  color:var(--sumi-w);background:#fff;border-radius:999px;padding:4px 12px}',
+    '#test-stop:hover{background:#F7EFDC;color:var(--sumi)}',
+    '#test-result .tr-card{font-family:"Zen Kaku Gothic New",sans-serif;color:var(--sumi);background:var(--washi);border:3px solid var(--line)}',
+    '#test-result .tr-title{font-family:"Zen Maru Gothic",sans-serif;font-weight:900;color:var(--kaki)}',
+    '#test-result td{border-bottom:2px dashed var(--line)}',
+    '#test-result td.no{color:var(--sumi-w)}',
+    '#test-result td.r-ok{color:var(--koke)}',
+    '#test-result td.r-ng{color:var(--aka)}',
+    '#test-result td.r-sk{color:#9AA6B5}',
+    '#test-result .tr-sum{font-family:"Zen Maru Gothic",sans-serif;font-weight:700}',
+    '#test-result .tr-sum b{color:var(--kaki)}',
+    '#test-result button{font-family:"Zen Maru Gothic",sans-serif;font-weight:700;border-radius:999px}',
+    '#test-again{color:#fff;background:var(--ai);border:2px solid var(--ai);box-shadow:0 3px 0 #1D4F78}',
+    '#test-close{color:var(--sumi-w);background:#fff;border:2px solid var(--line)}'
+  ].join('\n');
+  document.head.appendChild(s);
+})();
+</script>
+<!-- 📝 テストの 練習 ここまで -->
 </body>
 </html>
